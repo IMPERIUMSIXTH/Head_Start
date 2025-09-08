@@ -1,0 +1,283 @@
+name: HeadStart CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, staging, develop ]
+  pull_request:
+    branches: [ main, staging ]
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Frontend linting and testing
+  frontend-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run ESLint
+        run: npm run lint
+      
+      - name: Run TypeScript type check
+        run: npm run type-check
+      
+      - name: Run unit tests
+        run: npm test -- --coverage --watchAll=false
+      
+      - name: Build application
+        run: npm run build
+
+  # Backend linting and testing
+  backend-quality:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: headstart_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run ruff linting
+        run: ruff check .
+      
+      - name: Run black formatting check
+        run: black --check .
+      
+      - name: Run mypy type checking
+        run: mypy . --ignore-missing-imports
+      
+      - name: Run pytest
+        env:
+          DATABASE_TEST_URL: postgresql://test_user:test_password@localhost:5432/headstart_test
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: test-secret-key
+          OPENAI_API_KEY: test-key
+          CELERY_BROKER_URL: redis://localhost:6379/1
+          CELERY_RESULT_BACKEND: redis://localhost:6379/2
+        run: pytest --cov=. --cov-report=xml --cov-report=term-missing
+
+  # Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+      
+      - name: Run Bandit security scan
+        run: bandit -r . -f json -o bandit-report.json || true
+      
+      - name: Run Safety dependency check
+        run: safety check --json --output safety-report.json || true
+      
+      - name: Setup Node.js for frontend security
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install frontend dependencies
+        working-directory: ./src
+        run: npm ci
+      
+      - name: Run npm audit
+        working-directory: ./src
+        run: npm audit --audit-level=moderate
+
+  # Accessibility testing
+  accessibility-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install axe-core CLI
+        run: npm install -g @axe-core/cli
+      
+      - name: Install frontend dependencies
+        working-directory: ./src
+        run: npm ci
+      
+      - name: Build frontend
+        working-directory: ./src
+        run: npm run build
+      
+      - name: Start frontend server
+        working-directory: ./src
+        run: npm start &
+        
+      - name: Wait for server
+        run: sleep 10
+      
+      - name: Run accessibility tests
+        run: axe http://localhost:3000 --exit
+
+  # Integration tests
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [frontend-quality, backend-quality]
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: headstart_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/headstart_test
+        run: alembic upgrade head
+      
+      - name: Start backend server
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/headstart_test
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: test-secret-key
+          OPENAI_API_KEY: test-key
+          CELERY_BROKER_URL: redis://localhost:6379/1
+          CELERY_RESULT_BACKEND: redis://localhost:6379/2
+        run: uvicorn main:app --host 0.0.0.0 --port 8000 &
+      
+      - name: Wait for backend
+        run: sleep 10
+      
+      - name: Run integration tests
+        env:
+          API_BASE_URL: http://localhost:8000
+        run: pytest tests/integration/ -v
+
+  # Build and push Docker images (only on main branch)
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [integration-test, security-scan, accessibility-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: true
+          tags: headstart/backend:latest,headstart/backend:${{ github.sha }}
+      
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src
+          file: ./Dockerfile.frontend
+          push: true
+          tags: headstart/frontend:latest,headstart/frontend:${{ github.sha }}
+
+# Updated 2025-09-05: Comprehensive CI/CD pipeline with quality gates, security scanning, and accessibility testing
