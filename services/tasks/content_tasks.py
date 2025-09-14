@@ -10,6 +10,10 @@ Purpose: Background tasks for content processing, embedding generation, and batc
 from celery import current_task
 from sqlalchemy.orm import Session
 import structlog
+from typing import Dict, Any, Optional, List
+from datetime import datetime, timedelta
+import os
+
 from services.celery_app import celery_app
 from services.database import SessionLocal
 from services.models import ContentItem
@@ -18,12 +22,12 @@ from services.exceptions import ContentProcessingError
 
 logger = structlog.get_logger()
 
-def get_db_session():
+def get_db_session() -> Session:
     """Get database session for Celery tasks"""
     return SessionLocal()
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def process_content_embedding(self, content_id: str):
+def process_content_embedding(self, content_id: str) -> Dict[str, str]:
     """Generate embedding for content item"""
     logger.info("Processing content embedding", content_id=content_id, task_id=self.request.id)
     
@@ -42,7 +46,7 @@ def process_content_embedding(self, content_id: str):
         
         # Generate embedding
         text_content = f"{content.title} {content.description or ''}"
-        embedding = await content_processor.generate_embedding(text_content)
+        embedding = content_processor.generate_embedding(text_content)
         
         # Update content with embedding
         content.embedding = embedding
@@ -65,7 +69,7 @@ def process_content_embedding(self, content_id: str):
         db.close()
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def batch_process_youtube_playlist(self, playlist_url: str, user_id: str):
+def batch_process_youtube_playlist(self, playlist_url: str, user_id: str) -> Dict[str, str]:
     """Process entire YouTube playlist"""
     logger.info("Processing YouTube playlist", playlist_url=playlist_url, user_id=user_id)
     
@@ -94,7 +98,7 @@ def batch_process_youtube_playlist(self, playlist_url: str, user_id: str):
         db.close()
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=300)
-def batch_update_content_metadata(self, source: str):
+def batch_update_content_metadata(self, source: str) -> Dict[str, Any]:
     """Batch update metadata for content from specific source"""
     logger.info("Batch updating content metadata", source=source)
     
@@ -104,23 +108,23 @@ def batch_update_content_metadata(self, source: str):
         content_items = db.query(ContentItem).filter(
             ContentItem.source == source,
             ContentItem.status == 'approved'
-        ).limit(100).all()  # Process in batches of 100
+        ).limit(100).all()
         
         updated_count = 0
         for content in content_items:
             try:
                 if source == 'youtube' and content.source_id:
                     # Re-fetch YouTube metadata
-                    updated_data = await content_processor.process_youtube_content(content.url)
+                    updated_data = content_processor.process_youtube_content(content.url)
                     
                     # Update metadata
-                    content.metadata = updated_data["metadata"]
+                    content.content_metadata = updated_data["metadata"]
                     content.topics = updated_data["topics"]
                     updated_count += 1
                     
                 elif source == 'arxiv' and content.source_id:
                     # Re-fetch arXiv metadata
-                    updated_data = await content_processor.process_arxiv_content(content.source_id)
+                    updated_data = content_processor.process_arxiv_content(content.source_id)
                     
                     # Update metadata
                     content.metadata = updated_data["metadata"]
@@ -151,15 +155,12 @@ def batch_update_content_metadata(self, source: str):
         db.close()
 
 @celery_app.task(bind=True)
-def cleanup_failed_uploads(self):
+def cleanup_failed_uploads(self) -> Dict[str, Any]:
     """Clean up failed or orphaned file uploads"""
     logger.info("Cleaning up failed uploads")
     
     db = get_db_session()
     try:
-        # Find content items with upload source that are older than 24 hours and still pending
-        from datetime import datetime, timedelta
-        
         cutoff_time = datetime.utcnow() - timedelta(hours=24)
         
         failed_uploads = db.query(ContentItem).filter(
@@ -172,7 +173,6 @@ def cleanup_failed_uploads(self):
         for content in failed_uploads:
             try:
                 # Remove file if it exists
-                import os
                 if content.url and os.path.exists(content.url):
                     os.remove(content.url)
                 
@@ -198,7 +198,7 @@ def cleanup_failed_uploads(self):
         db.close()
 
 @celery_app.task(bind=True)
-def generate_content_difficulty_levels(self):
+def generate_content_difficulty_levels(self) -> Dict[str, Any]:
     """Analyze content and assign difficulty levels"""
     logger.info("Generating content difficulty levels")
     
@@ -208,12 +208,11 @@ def generate_content_difficulty_levels(self):
         content_items = db.query(ContentItem).filter(
             ContentItem.difficulty_level.is_(None),
             ContentItem.status == 'approved'
-        ).limit(50).all()  # Process in batches
+        ).limit(50).all()
         
         updated_count = 0
         for content in content_items:
             try:
-                # Simple heuristic for difficulty level
                 difficulty = _analyze_content_difficulty(content)
                 content.difficulty_level = difficulty
                 updated_count += 1
@@ -239,13 +238,11 @@ def _analyze_content_difficulty(content: ContentItem) -> str:
     """Analyze content and determine difficulty level"""
     # Simple heuristic based on content characteristics
     
-    # Check for beginner keywords
     beginner_keywords = [
         'introduction', 'basics', 'getting started', 'beginner', 'tutorial',
         'fundamentals', 'overview', 'primer', '101'
     ]
     
-    # Check for advanced keywords
     advanced_keywords = [
         'advanced', 'expert', 'deep dive', 'optimization', 'architecture',
         'performance', 'scalability', 'research', 'cutting-edge'
@@ -253,17 +250,14 @@ def _analyze_content_difficulty(content: ContentItem) -> str:
     
     text_content = f"{content.title} {content.description or ''}".lower()
     
-    # Count keyword matches
     beginner_score = sum(1 for keyword in beginner_keywords if keyword in text_content)
     advanced_score = sum(1 for keyword in advanced_keywords if keyword in text_content)
     
-    # Determine difficulty based on scores and other factors
     if beginner_score > advanced_score:
         return 'beginner'
     elif advanced_score > beginner_score:
         return 'advanced'
     else:
-        # Default to intermediate
         return 'intermediate'
 
 # Updated 2025-09-05: Comprehensive content processing Celery tasks

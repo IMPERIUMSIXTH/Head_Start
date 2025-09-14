@@ -1,129 +1,93 @@
 """
-HeadStart Application Settings
-Configuration management using Pydantic Settings
+Application Settings
+Configuration management using Pydantic settings
 
 Author: HeadStart Development Team
-Created: 2025-09-05
-Purpose: Centralized configuration management with environment variable support
+Created: 2025-09-09
+Purpose: Centralized application configuration
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, validator
 from typing import List, Optional
 import os
-from functools import lru_cache
 
 class Settings(BaseSettings):
-    """Application settings with environment variable support"""
+    """Application settings"""
     
+    # Environment
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
+    
+    # Database
+    DATABASE_URL: str = "sqlite:///./headstart.db"
+    DATABASE_TEST_URL: str = "sqlite:///./headstart_test.db"
+
+    # External APIs
+    ARXIV_API_BASE_URL: str = "http://export.arxiv.org/api/query"
+
     # Application Configuration
-    APP_NAME: str = Field(default="HeadStart", description="Application name")
-    APP_VERSION: str = Field(default="1.0.0", description="Application version")
-    DEBUG: bool = Field(default=False, description="Debug mode")
-    ENVIRONMENT: str = Field(default="production", description="Environment name")
-    
-    # Database Configuration
-    DATABASE_URL: str = Field(..., description="PostgreSQL database URL")
-    DATABASE_TEST_URL: Optional[str] = Field(default=None, description="Test database URL")
-    
-    # Redis Configuration
-    REDIS_URL: str = Field(..., description="Redis connection URL")
+    APP_NAME: str = "HeadStart"
+    APP_VERSION: str = "1.0.0"
+
+    # File Upload
+    MAX_UPLOAD_SIZE: str = "50MB"
+    UPLOAD_PATH: str = "./uploads"
+
+    # Logging
+    LOG_FORMAT: str = "json"
     
     # JWT Configuration
-    JWT_SECRET: str = Field(..., description="JWT secret key")
-    JWT_ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="Access token expiry in minutes")
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Refresh token expiry in days")
+    JWT_SECRET: str = "your-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # OpenAI Configuration
-    OPENAI_API_KEY: str = Field(..., description="OpenAI API key")
+    # CORS
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
     
-    # External APIs
-    YOUTUBE_API_KEY: Optional[str] = Field(default=None, description="YouTube API key")
-    ARXIV_API_BASE_URL: str = Field(default="http://export.arxiv.org/api/query", description="arXiv API base URL")
+    # Logging
+    LOG_LEVEL: str = "INFO"
     
-    # OAuth Configuration
-    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, description="Google OAuth client ID")
-    GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None, description="Google OAuth client secret")
-    GITHUB_CLIENT_ID: Optional[str] = Field(default=None, description="GitHub OAuth client ID")
-    GITHUB_CLIENT_SECRET: Optional[str] = Field(default=None, description="GitHub OAuth client secret")
+    # OAuth (optional)
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GITHUB_CLIENT_ID: Optional[str] = None
+    GITHUB_CLIENT_SECRET: Optional[str] = None
     
-    # Security Configuration
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], description="Allowed CORS origins")
-    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1"], description="Allowed hosts")
-    
-    # File Upload Configuration
-    MAX_UPLOAD_SIZE: str = Field(default="50MB", description="Maximum file upload size")
-    UPLOAD_PATH: str = Field(default="./uploads", description="File upload directory")
-    
+    # External APIs (optional)
+    OPENAI_API_KEY: Optional[str] = None
+    GPT_API_KEY: Optional[str] = "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"
+    YOUTUBE_API_KEY: Optional[str] = None
+
+    # Redis Configuration
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # Celery Configuration
-    CELERY_BROKER_URL: str = Field(..., description="Celery broker URL")
-    CELERY_RESULT_BACKEND: str = Field(..., description="Celery result backend URL")
-    
-    # Logging Configuration
-    LOG_LEVEL: str = Field(default="INFO", description="Logging level")
-    LOG_FORMAT: str = Field(default="json", description="Log format")
-    
-    @validator('CORS_ORIGINS', pre=True)
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list"""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',')]
-        return v
-    
-    @validator('ALLOWED_HOSTS', pre=True)
-    def parse_allowed_hosts(cls, v):
-        """Parse allowed hosts from string or list"""
-        if isinstance(v, str):
-            return [host.strip() for host in v.split(',')]
-        return v
-    
-    @validator('MAX_UPLOAD_SIZE')
-    def validate_upload_size(cls, v):
-        """Validate upload size format"""
-        if not v.upper().endswith(('B', 'KB', 'MB', 'GB')):
-            raise ValueError('Upload size must end with B, KB, MB, or GB')
-        return v
-    
-    @validator('LOG_LEVEL')
-    def validate_log_level(cls, v):
-        """Validate log level"""
-        valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
-        if v.upper() not in valid_levels:
-            raise ValueError(f'Log level must be one of: {valid_levels}')
-        return v.upper()
-    
-    @validator('ENVIRONMENT')
-    def validate_environment(cls, v):
-        """Validate environment name"""
-        valid_environments = ['development', 'staging', 'production', 'testing']
-        if v.lower() not in valid_environments:
-            raise ValueError(f'Environment must be one of: {valid_environments}')
-        return v.lower()
-    
-    def get_upload_size_bytes(self) -> int:
-        """Convert upload size string to bytes"""
-        size_str = self.MAX_UPLOAD_SIZE.upper()
-        
-        if size_str.endswith('B'):
-            return int(size_str[:-1])
-        elif size_str.endswith('KB'):
-            return int(size_str[:-2]) * 1024
-        elif size_str.endswith('MB'):
-            return int(size_str[:-2]) * 1024 * 1024
-        elif size_str.endswith('GB'):
-            return int(size_str[:-2]) * 1024 * 1024 * 1024
-        
-        return int(size_str)
-    
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # Frontend URL
+    NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
+
+    # Encryption
+    ENCRYPTION_KEY: str = "default-encryption-key-change-in-production"
+
     class Config:
         env_file = ".env"
-        env_file_encoding = "utf-8"
         case_sensitive = True
 
-@lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings instance"""
-    return Settings()
+# Global settings instance
+_settings = None
 
-# Updated 2025-09-05: Application settings with comprehensive configuration management
+def get_settings() -> Settings:
+    """Get application settings (singleton)"""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+def reset_settings():
+    """Reset the settings cache"""
+    global _settings
+    _settings = None

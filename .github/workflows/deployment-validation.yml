@@ -1,0 +1,290 @@
+name: Deployment Validation
+
+on:
+  push:
+    branches: [ main, staging, develop ]
+  pull_request:
+    branches: [ main, staging ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for validation'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Deployment validation tests
+  deployment-validation-tests:
+    runs-on: ubuntu-latest
+    name: Run Deployment Validation Tests
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run deployment validation unit tests
+        run: |
+          echo "Running deployment validation unit tests..."
+          python -m pytest tests/test_deployment_validator.py -v --tb=short --cov=services.deployment_validator --cov-report=xml --cov-report=term-missing
+      
+      - name: Upload test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-validation-coverage
+          path: coverage.xml
+          retention-days: 30
+
+  # Deployment readiness validation
+  deployment-readiness:
+    runs-on: ubuntu-latest
+    needs: [deployment-validation-tests]
+    name: Validate Deployment Readiness
+    
+    strategy:
+      matrix:
+        environment: [development, staging, production]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Validate deployment readiness
+        run: |
+          echo "Validating deployment readiness for ${{ matrix.environment }} environment..."
+          python scripts/run_deployment_validation.py --environment ${{ matrix.environment }} --output console
+      
+      - name: Generate deployment validation report
+        run: |
+          echo "Generating deployment validation report for ${{ matrix.environment }}..."
+          python scripts/run_deployment_validation.py --environment ${{ matrix.environment }} --output json --output-file deployment-validation-${{ matrix.environment }}.json
+      
+      - name: Upload deployment validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-validation-report-${{ matrix.environment }}
+          path: deployment-validation-${{ matrix.environment }}.json
+          retention-days: 30
+      
+      - name: Fail on production deployment issues
+        if: matrix.environment == 'production'
+        run: |
+          echo "Checking production deployment readiness..."
+          python scripts/run_deployment_validation.py --environment production --output json --output-file temp-report.json
+          
+          # Check if deployment is ready
+          if [ "$(jq '.deployment_ready' temp-report.json)" = "false" ]; then
+            echo "❌ Production deployment validation failed!"
+            echo "See deployment validation report for details."
+            exit 1
+          else
+            echo "✅ Production deployment validation passed!"
+          fi
+
+  # Kubernetes manifests validation
+  k8s-validation:
+    runs-on: ubuntu-latest
+    needs: [deployment-readiness]
+    name: Validate Kubernetes Manifests
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+      
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "Validating Kubernetes manifests..."
+          if [ -d "k8s" ]; then
+            find k8s -name "*.yaml" -o -name "*.yml" | xargs -I {} sh -c 'echo "Validating {}"; kubectl apply --dry-run=client -f {} || exit 1'
+            echo "✅ All Kubernetes manifests are valid!"
+          else
+            echo "⚠️ No k8s directory found, skipping Kubernetes validation"
+          fi
+      
+      - name: Validate Helm charts
+        run: |
+          echo "Validating Helm charts..."
+          if [ -d "helm" ]; then
+            # Install Helm if not present
+            curl https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz -o helm.tar.gz
+            tar -zxvf helm.tar.gz
+            sudo mv linux-amd64/helm /usr/local/bin/helm
+            
+            find helm -name "Chart.yaml" | while read chart; do
+              chart_dir=$(dirname "$chart")
+              echo "Validating Helm chart in $chart_dir"
+              helm lint "$chart_dir" || exit 1
+            done
+            echo "✅ All Helm charts are valid!"
+          else
+            echo "⚠️ No helm directory found, skipping Helm validation"
+          fi
+
+  # Docker image validation
+  docker-validation:
+    runs-on: ubuntu-latest
+    needs: [k8s-validation]
+    name: Validate Docker Images
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Validate Dockerfile syntax
+        run: |
+          echo "Validating Dockerfile syntax..."
+          
+          # Validate backend Dockerfile
+          if [ -f "Dockerfile.backend" ]; then
+            docker build --dry-run -f Dockerfile.backend . || exit 1
+            echo "✅ Backend Dockerfile is valid!"
+          fi
+          
+          # Validate frontend Dockerfile
+          if [ -f "Dockerfile.frontend" ]; then
+            docker build --dry-run -f Dockerfile.frontend ./src || exit 1
+            echo "✅ Frontend Dockerfile is valid!"
+          fi
+      
+      - name: Validate docker-compose configuration
+        run: |
+          echo "Validating docker-compose configuration..."
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose config || exit 1
+            echo "✅ Docker Compose configuration is valid!"
+          fi
+
+  # Final deployment readiness summary
+  deployment-summary:
+    runs-on: ubuntu-latest
+    needs: [docker-validation]
+    name: Deployment Readiness Summary
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Generate comprehensive deployment report
+        run: |
+          echo "Generating comprehensive deployment readiness report..."
+          
+          # Run validation for all environments
+          for env in development staging production; do
+            echo "=== $env Environment ==="
+            python scripts/run_deployment_validation.py --environment $env --output console
+            echo ""
+          done
+      
+      - name: Create deployment readiness badge
+        run: |
+          echo "Creating deployment readiness status..."
+          
+          # Check production readiness
+          python scripts/run_deployment_validation.py --environment production --output json --output-file final-report.json
+          
+          if [ "$(jq '.deployment_ready' final-report.json)" = "true" ]; then
+            echo "✅ Project is ready for deployment!"
+            echo "DEPLOYMENT_READY=true" >> $GITHUB_ENV
+          else
+            echo "❌ Project needs fixes before deployment"
+            echo "DEPLOYMENT_READY=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Upload final deployment report
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-deployment-report
+          path: final-report.json
+          retention-days: 30
+      
+      - name: Comment on PR with deployment status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('final-report.json', 'utf8'));
+            
+            const status = report.deployment_ready ? '✅ Ready' : '❌ Needs Attention';
+            const score = report.overall_score;
+            
+            const body = `
+            ## 🚀 Deployment Validation Results
+            
+            **Status:** ${status}
+            **Overall Score:** ${score}/100
+            
+            ### Validation Summary:
+            - **Kubernetes:** ${report.kubernetes_validation.manifest_syntax_valid ? '✅' : '❌'} Manifests valid
+            - **Network Security:** ${report.network_security.tls_configured ? '✅' : '❌'} TLS configured
+            - **Secrets:** ${report.secrets_validation.no_hardcoded_secrets ? '✅' : '❌'} No hardcoded secrets
+            
+            ${report.recommendations.length > 0 ? `### Recommendations:\n${report.recommendations.map(r => `- ${r}`).join('\n')}` : ''}
+            
+            [View full report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+# Updated 2025-09-05: Comprehensive deployment validation workflow

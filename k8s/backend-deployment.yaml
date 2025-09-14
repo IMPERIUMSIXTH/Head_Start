@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headstart-backend
+  labels:
+    app: headstart-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: headstart-backend
+  template:
+    metadata:
+      labels:
+        app: headstart-backend
+    spec:
+      containers:
+      - name: backend
+        image: headstart/backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: headstart-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: POSTGRES_DB
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: REDIS_URL
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: CELERY_BROKER_URL
+        - name: CELERY_RESULT_BACKEND
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: CELERY_RESULT_BACKEND
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: headstart-secrets
+              key: JWT_SECRET
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: headstart-secrets
+              key: OPENAI_API_KEY
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: ENVIRONMENT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: headstart-config
+              key: LOG_LEVEL
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

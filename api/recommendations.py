@@ -13,13 +13,17 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import structlog
 from services.database import get_db
-from services.models import User, Recommendation
+from services.models import User, Recommendation, ContentItem
 from services.dependencies import get_current_active_user, get_current_verified_user
-from services.recommendations import recommendation_engine
+from services.recommendations import RecommendationEngine
 from services.exceptions import ExternalServiceError
+from services.ai_client import get_ai_client
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+# Initialize recommendation engine
+recommendation_engine = RecommendationEngine()
 
 # Pydantic models for request/response
 class RecommendationResponse(BaseModel):
@@ -84,6 +88,7 @@ async def get_recommendation_feed(
                refresh=refresh)
     
     try:
+        ai_client = get_ai_client()
         # Generate recommendations
         recommendations = await recommendation_engine.generate_recommendations(
             user=current_user,
@@ -95,20 +100,28 @@ async def get_recommendation_feed(
         # Convert to response format
         recommendation_responses = []
         for rec in recommendations:
+            # Fetch content details for each recommendation
+            content = db.query(ContentItem).filter(ContentItem.id == rec["content"].id).first()
+            if not content:
+                continue
+            # Generate explanation text using AI client
+            explanation_text = await ai_client.generate_explanation(
+                prompt=f"Explain why this content titled '{content.title}' is recommended."
+            )
             recommendation_responses.append(RecommendationResponse(
-                content_id=rec['content_id'],
-                title=rec['title'],
-                description=rec['description'],
-                content_type=rec['content_type'],
-                source=rec['source'],
-                url=rec['url'],
-                duration_minutes=rec['duration_minutes'],
-                difficulty_level=rec['difficulty_level'],
-                topics=rec['topics'],
-                language=rec['language'],
-                recommendation_score=rec['recommendation_score'],
-                explanation_factors=rec['explanation_factors'],
-                created_at=rec['created_at']
+                content_id=str(content.id),
+                title=content.title,
+                description=content.description,
+                content_type=content.content_type,
+                source=content.source,
+                url=content.url,
+                duration_minutes=content.duration_minutes,
+                difficulty_level=content.difficulty_level,
+                topics=content.topics,
+                language=content.language,
+                recommendation_score=rec["score"],
+                explanation_factors={"text": explanation_text},
+                created_at=content.created_at.isoformat()
             ))
         
         from datetime import datetime
@@ -132,6 +145,152 @@ async def get_recommendation_feed(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate recommendation feed"
+        )
+
+@router.get("/", response_model=RecommendationFeedResponse)
+async def get_personalized_recommendations(
+    limit: int = Query(default=10, ge=1, le=20, description="Number of recommendations to return"),
+    current_user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db)
+):
+    """Fetch personalized course/resource recommendations using vector similarity"""
+    logger.info("Personalized recommendations request",
+               user_id=str(current_user.id),
+               limit=limit)
+
+    try:
+        ai_client = get_ai_client()
+
+        # Get user's interaction history for context
+        interactions = db.query(UserInteraction).filter(
+            UserInteraction.user_id == current_user.id
+        ).all()
+
+        # Get available content with embeddings
+        available_content = db.query(ContentItem).filter(
+            ContentItem.status == "approved",
+            ContentItem.embedding.isnot(None)
+        ).all()
+
+        if not available_content:
+            return RecommendationFeedResponse(
+                recommendations=[],
+                total_count=0,
+                algorithm_version="v1.0",
+                generated_at=datetime.utcnow().isoformat()
+            )
+
+        # Calculate recommendations based on user preferences and embeddings
+        recommendations = []
+
+        # Get user preferences for context
+        from services.models import UserPreferences
+        preferences = db.query(UserPreferences).filter(
+            UserPreferences.user_id == current_user.id
+        ).first()
+
+        for content in available_content:
+            score = 0.0
+            explanation_factors = {}
+
+            # Vector similarity with user's recent interactions
+            if interactions:
+                user_embedding = None
+                # Create a composite embedding from user's recent content
+                recent_content_ids = [i.content_id for i in interactions[-5:]]  # Last 5 interactions
+                recent_embeddings = []
+
+                for content_id in recent_content_ids:
+                    recent_content = db.query(ContentItem).filter(ContentItem.id == content_id).first()
+                    if recent_content and recent_content.embedding:
+                        recent_embeddings.append(recent_content.embedding)
+
+                if recent_embeddings:
+                    # Average the recent embeddings to create user profile embedding
+                    import numpy as np
+                    user_embedding = np.mean(recent_embeddings, axis=0).tolist()
+
+                    # Calculate similarity
+                    if content.embedding:
+                        similarity = ai_client.calculate_similarity(user_embedding, content.embedding)
+                        score += similarity * 0.6  # Weight vector similarity
+                        explanation_factors["vector_similarity"] = similarity
+
+            # Preference-based scoring
+            if preferences:
+                # Domain match
+                if preferences.learning_domains and content.topics:
+                    domain_match = any(domain in content.topics for domain in preferences.learning_domains)
+                    if domain_match:
+                        score += 0.2
+                        explanation_factors["domain_match"] = 0.8
+
+                # Content type preference
+                if preferences.preferred_content_types and content.content_type in preferences.preferred_content_types:
+                    score += 0.15
+                    explanation_factors["content_type_match"] = 0.7
+
+            # Avoid already interacted content
+            if any(i.content_id == content.id for i in interactions):
+                score *= 0.3  # Reduce score for already seen content
+
+            if score > 0.1:  # Minimum threshold
+                # Generate AI explanation
+                explanation_text = await ai_client.generate_explanation(
+                    prompt=f"Explain why '{content.title}' would be a good recommendation for a learner interested in {', '.join(content.topics[:3])}."
+                )
+
+                recommendations.append({
+                    "content": content,
+                    "score": score,
+                    "explanation_factors": {"text": explanation_text, **explanation_factors}
+                })
+
+        # Sort by score and limit results
+        recommendations.sort(key=lambda x: x["score"], reverse=True)
+        recommendations = recommendations[:limit]
+
+        # Convert to response format
+        recommendation_responses = []
+        for rec in recommendations:
+            content = rec["content"]
+            recommendation_responses.append(RecommendationResponse(
+                content_id=str(content.id),
+                title=content.title,
+                description=content.description,
+                content_type=content.content_type,
+                source=content.source,
+                url=content.url,
+                duration_minutes=content.duration_minutes,
+                difficulty_level=content.difficulty_level,
+                topics=content.topics,
+                language=content.language,
+                recommendation_score=rec["score"],
+                explanation_factors=rec["explanation_factors"],
+                created_at=content.created_at.isoformat()
+            ))
+
+        from datetime import datetime
+        response = RecommendationFeedResponse(
+            recommendations=recommendation_responses,
+            total_count=len(recommendation_responses),
+            algorithm_version="v1.0-vector",
+            generated_at=datetime.utcnow().isoformat()
+        )
+
+        logger.info("Personalized recommendations generated",
+                   user_id=str(current_user.id),
+                   count=len(recommendation_responses))
+
+        return response
+
+    except Exception as e:
+        logger.error("Personalized recommendations failed",
+                    error=str(e),
+                    user_id=str(current_user.id))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate personalized recommendations"
         )
 
 @router.post("/feedback")

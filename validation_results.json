@@ -1,0 +1,173 @@
+{
+  "environment": "production",
+  "deployment_ready": false,
+  "overall_score": 23.75,
+  "validation_timestamp": "2025-09-10T11:45:07.882057",
+  "kubernetes_validation": {
+    "manifest_syntax_valid": true,
+    "resource_quotas_valid": true,
+    "security_policies_valid": true,
+    "best_practices_followed": true,
+    "errors": [],
+    "warnings": [
+      {
+        "message": "kubectl not available - skipping manifest validation",
+        "severity": "warning"
+      },
+      {
+        "message": "Deployment not configured to run as non-root user",
+        "severity": "warning"
+      },
+      {
+        "message": "Container celery-worker missing liveness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Container celery-worker missing readiness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Deployment not configured to run as non-root user",
+        "severity": "warning"
+      },
+      {
+        "message": "Deployment not configured to run as non-root user",
+        "severity": "warning"
+      },
+      {
+        "message": "Container postgres missing resource limits",
+        "severity": "warning"
+      },
+      {
+        "message": "Container postgres missing resource requests",
+        "severity": "warning"
+      },
+      {
+        "message": "Container postgres missing liveness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Container postgres missing readiness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Deployment not configured to run as non-root user",
+        "severity": "warning"
+      },
+      {
+        "message": "Container redis missing resource limits",
+        "severity": "warning"
+      },
+      {
+        "message": "Container redis missing resource requests",
+        "severity": "warning"
+      },
+      {
+        "message": "Container redis missing liveness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Container redis missing readiness probe",
+        "severity": "warning"
+      },
+      {
+        "message": "Deployment not configured to run as non-root user",
+        "severity": "warning"
+      },
+      {
+        "message": "Secret has no data",
+        "severity": "warning"
+      }
+    ]
+  },
+  "network_security": {
+    "network_policies_configured": false,
+    "least_privilege_enforced": false,
+    "tls_configured": false,
+    "ingress_security_valid": true,
+    "service_mesh_configured": false,
+    "errors": [],
+    "warnings": [
+      {
+        "message": "No network policies found - consider implementing network segmentation",
+        "severity": "warning"
+      },
+      {
+        "message": "TLS not configured - ensure HTTPS is enabled for production",
+        "severity": "warning"
+      }
+    ]
+  },
+  "secrets_validation": {
+    "secrets_externalized": true,
+    "environment_vars_configured": true,
+    "no_hardcoded_secrets": false,
+    "secret_rotation_configured": false,
+    "errors": [
+      {
+        "message": "Hardcoded secret found: tests\\enhanced_unit_tests.py:362",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\mutation_testing.py:273",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\mutation_testing.py:353",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\test_deployment_validator.py:214",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\test_deployment_validator.py:215",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\test_deployment_validator.py:215",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\test_deployment_validator.py:677",
+        "severity": "critical"
+      },
+      {
+        "message": "Hardcoded secret found: tests\\integration\\auth_integration.py:414",
+        "severity": "critical"
+      }
+    ],
+    "warnings": [
+      {
+        "message": "Environment files found - ensure secrets are managed via secret manager in production",
+        "severity": "warning"
+      }
+    ]
+  },
+  "recommendations": [
+    "Configure TLS/HTTPS for secure communication",
+    "Implement network policies for network segmentation",
+    "CRITICAL: Remove all hardcoded secrets from codebase",
+    "Implement secret rotation for enhanced security",
+    "Ensure monitoring and alerting are configured",
+    "Verify backup and disaster recovery procedures",
+    "Conduct security audit before production deployment"
+  ],
+  "helm_validation": {
+    "template_syntax_valid": true,
+    "values_schema_valid": true,
+    "chart_structure_valid": true,
+    "dependencies_resolved": true,
+    "errors": [],
+    "warnings": [
+      {
+        "message": "Helm not available - skipping Helm validation",
+        "severity": "warning"
+      },
+      {
+        "message": "No Helm charts found - using direct Kubernetes manifests or docker-compose",
+        "severity": "info"
+      }
+    ]
+  }
+}

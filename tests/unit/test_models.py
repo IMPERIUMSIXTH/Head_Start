@@ -12,7 +12,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from services.database import Base
 from services.models import User, UserPreferences, ContentItem, UserInteraction, Recommendation, LearningSession
-import uuid
 
 # Test database setup
 TEST_DATABASE_URL = "sqlite:///./test.db"

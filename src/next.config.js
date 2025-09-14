@@ -73,9 +73,6 @@ const nextConfig = {
   
   // Enable experimental features
   experimental: {
-    // Enable app directory (Next.js 13+)
-    appDir: false, // Using pages directory for now
-    
     // Enable server components
     serverComponentsExternalPackages: [],
   },
@@ -103,5 +100,3 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
-
-// Updated 2025-09-05: Next.js configuration with security headers and optimization settings

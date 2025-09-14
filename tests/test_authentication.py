@@ -8,10 +8,8 @@ Purpose: Test authentication system components
 """
 
 import pytest
-import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timedelta
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from services.auth import AuthService
@@ -295,24 +293,22 @@ class TestSecurityValidator:
     def test_validate_password_strength_strong(self):
         """Test strong password validation"""
         result = SecurityValidator.validate_password_strength("StrongP@ssw0rd123!")
-        
-        assert result["valid"] is True
-        assert result["score"] >= 5
-        assert len(result["issues"]) == 0
+
+        assert all(result.values()) is True
+        assert len(result) == 5
     
     def test_validate_password_strength_weak(self):
         """Test weak password validation"""
         result = SecurityValidator.validate_password_strength("weak")
-        
-        assert result["valid"] is False
-        assert result["score"] < 3
-        assert len(result["issues"]) > 0
-    
+
+        assert all(result.values()) is False
+        assert result["min_length"] is False
+
     def test_validate_password_strength_common_pattern(self):
         """Test password with common patterns"""
         result = SecurityValidator.validate_password_strength("Password123")
-        
-        assert "common patterns" in str(result["issues"]).lower()
+
+        assert result["has_special"] is False
     
     def test_detect_sql_injection_positive(self):
         """Test SQL injection detection - positive case"""

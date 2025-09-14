@@ -7,7 +7,7 @@ Created: 2025-09-05
 Purpose: Authentication endpoints for user login, registration, and token management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, EmailStr, validator
 from sqlalchemy.orm import Session
@@ -16,9 +16,10 @@ import structlog
 from services.database import get_db
 from services.auth import auth_service
 from services.models import User
-from services.dependencies import get_current_user, get_current_active_user
+from services.dependencies import get_current_user, get_current_active_user, validate_input
 from services.exceptions import AuthenticationError, ValidationError, ConflictError
 from services.oauth import oauth_service
+from services.security import rate_limit
 from config.settings import get_settings
 
 logger = structlog.get_logger()
@@ -114,7 +115,11 @@ class OAuthCallbackRequest(BaseModel):
         return v
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+@rate_limit(calls=5, period=60)
+async def register_user(user_data: UserRegister, db: Session = Depends(get_db), request: Request = None, email: str = Depends(validate_input), password: str = Depends(validate_input), full_name: str = Depends(validate_input)):
+    user_data.email = email
+    user_data.password = password
+    user_data.full_name = full_name
     """Register a new user account"""
     logger.info("User registration attempt", email=user_data.email)
     
@@ -162,7 +167,10 @@ async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         )
 
 @router.post("/login", response_model=TokenResponse)
-async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db)):
+@rate_limit(calls=5, period=60)
+async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db), request: Request = None, email: str = Depends(validate_input), password: str = Depends(validate_input)):
+    user_credentials.email = email
+    user_credentials.password = password
     """Authenticate user and return JWT tokens"""
     logger.info("User login attempt", email=user_credentials.email)
     

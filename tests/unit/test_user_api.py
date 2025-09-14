@@ -16,7 +16,6 @@ from services.models import User, UserPreferences, ContentItem, UserInteraction
 from services.auth import auth_service
 from main import app
 import uuid
-from datetime import datetime
 
 # Test database setup
 TEST_DATABASE_URL = "sqlite:///./test_user_api.db"

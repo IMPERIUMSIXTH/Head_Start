@@ -1,0 +1,42 @@
+{
+  "projectToken": "CHROMATIC_PROJECT_TOKEN",
+  "buildScriptName": "build-storybook",
+  "exitZeroOnChanges": true,
+  "ignoreLastBuildOnBranch": "main",
+  "skip": "dependabot/**",
+  "externals": [
+    "public/**"
+  ],
+  "delay": 300,
+  "pauseAnimationAtEnd": true,
+  "threshold": 0.2,
+  "diffThreshold": 0.063,
+  "viewports": [375, 768, 1200, 1920],
+  "modes": {
+    "light": {
+      "backgrounds": { "default": "light" }
+    },
+    "dark": {
+      "backgrounds": { "default": "dark" }
+    }
+  },
+  "ignoreSelectors": [
+    "[data-chromatic='ignore']",
+    ".timestamp",
+    ".random-id",
+    "[data-testid='dynamic-content']"
+  ],
+  "fileHashing": true,
+  "zip": true,
+  "junitReport": true,
+  "diagnostics": false,
+  "debug": false,
+  "interactive": false,
+  "autoAcceptChanges": false,
+  "onlyChanged": false,
+  "traceChanged": "expanded",
+  "untraced": false,
+  "externals": ["public/**"],
+  "storybookBuildDir": "storybook-static",
+  "storybookConfigDir": ".storybook"
+}

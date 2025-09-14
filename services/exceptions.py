@@ -1,67 +1,89 @@
 """
-Custom Exception Classes
-HeadStart application-specific exceptions
+Custom Exceptions
+Application-specific exception classes
 
 Author: HeadStart Development Team
-Created: 2025-09-05
-Purpose: Define custom exceptions for consistent error handling across the application
+Created: 2025-09-09
+Purpose: Custom exception handling for HeadStart application
 """
 
+from fastapi import status
+
 class HeadStartException(Exception):
-    """Base exception class for HeadStart application"""
+    """Base exception for HeadStart application"""
     
-    def __init__(self, message: str, error_code: str, status_code: int = 500):
+    def __init__(self, message: str, error_code: str = "GENERIC_ERROR", status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR):
         self.message = message
         self.error_code = error_code
         self.status_code = status_code
         super().__init__(self.message)
 
 class ValidationError(HeadStartException):
-    """Raised when input validation fails"""
+    """Validation error exception"""
     
     def __init__(self, message: str):
-        super().__init__(message, "VALIDATION_ERROR", 400)
+        super().__init__(
+            message=message,
+            error_code="VALIDATION_ERROR",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
 
 class AuthenticationError(HeadStartException):
-    """Raised when authentication fails"""
+    """Authentication error exception"""
     
-    def __init__(self, message: str = "Authentication required"):
-        super().__init__(message, "AUTH_ERROR", 401)
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="AUTHENTICATION_ERROR",
+            status_code=status.HTTP_401_UNAUTHORIZED
+        )
 
 class AuthorizationError(HeadStartException):
-    """Raised when user lacks required permissions"""
+    """Authorization error exception"""
     
-    def __init__(self, message: str = "Insufficient permissions"):
-        super().__init__(message, "AUTHZ_ERROR", 403)
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="AUTHORIZATION_ERROR",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
 
 class NotFoundError(HeadStartException):
-    """Raised when requested resource is not found"""
+    """Not found error exception"""
     
-    def __init__(self, message: str = "Resource not found"):
-        super().__init__(message, "NOT_FOUND", 404)
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="NOT_FOUND_ERROR",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
 
 class ConflictError(HeadStartException):
-    """Raised when there's a conflict with existing data"""
+    """Conflict error exception"""
     
-    def __init__(self, message: str = "Resource conflict"):
-        super().__init__(message, "CONFLICT", 409)
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="CONFLICT_ERROR",
+            status_code=status.HTTP_409_CONFLICT
+        )
 
 class RateLimitError(HeadStartException):
-    """Raised when rate limit is exceeded"""
-    
+    """Rate limit error exception"""
+
     def __init__(self, message: str = "Rate limit exceeded"):
-        super().__init__(message, "RATE_LIMIT", 429)
+        super().__init__(
+            message=message,
+            error_code="RATE_LIMIT_ERROR",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS
+        )
 
 class ExternalServiceError(HeadStartException):
-    """Raised when external service call fails"""
-    
-    def __init__(self, message: str = "External service unavailable"):
-        super().__init__(message, "EXTERNAL_SERVICE_ERROR", 502)
+    """External service error exception"""
 
-class ContentProcessingError(HeadStartException):
-    """Raised when content processing fails"""
-    
-    def __init__(self, message: str = "Content processing failed"):
-        super().__init__(message, "CONTENT_PROCESSING_ERROR", 422)
-
-# Updated 2025-09-05: Custom exception classes for HeadStart application
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="EXTERNAL_SERVICE_ERROR",
+            status_code=status.HTTP_502_BAD_GATEWAY
+        )

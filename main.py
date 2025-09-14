@@ -25,6 +25,7 @@ from services.exceptions import HeadStartException
 from api.auth import router as auth_router
 from api.content import router as content_router
 from api.user import router as user_router
+from api.recommendations import router as recommendations_router
 
 # Configure structured logging
 structlog.configure(
@@ -94,7 +95,7 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Add trusted host middleware
@@ -145,7 +146,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "error": {
                 "code": "INTERNAL_SERVER_ERROR",
                 "message": "An unexpected error occurred" if not settings.DEBUG else str(exc),
-                "timestamp": structlog.processors.TimeStamper(fmt="iso")._stamper(),
+                "timestamp": structlog.processors.TimeStamper(fmt="iso")._stamper({}),
                 "path": request.url.path
             }
         }
@@ -159,7 +160,7 @@ async def health_check():
         "status": "healthy",
         "service": "HeadStart API",
         "version": "1.0.0",
-        "timestamp": structlog.processors.TimeStamper(fmt="iso")._stamper()
+        "timestamp": structlog.processors.TimeStamper(fmt="iso")._stamper({})
     }
 
 # API version endpoint
@@ -191,6 +192,12 @@ app.include_router(
     user_router,
     prefix="/api/user",
     tags=["User Management"]
+)
+
+app.include_router(
+    recommendations_router,
+    prefix="/api/recommendations",
+    tags=["Recommendations"]
 )
 
 # Root endpoint

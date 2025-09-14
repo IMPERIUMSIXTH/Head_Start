@@ -68,7 +68,7 @@ class ContentIntegrationService:
                 topics=content_data["topics"],
                 language=content_data["language"],
                 embedding=content_data["embedding"],
-                metadata=content_data["metadata"],
+                content_metadata=content_data["metadata"],
                 status="pending"  # Requires admin approval
             )
             
@@ -143,7 +143,7 @@ class ContentIntegrationService:
                 topics=content_data["topics"],
                 language=content_data["language"],
                 embedding=content_data["embedding"],
-                metadata=content_data["metadata"],
+                content_metadata=content_data["metadata"],
                 status="pending"
             )
             

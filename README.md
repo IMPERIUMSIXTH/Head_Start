@@ -156,6 +156,26 @@ cd src && npm run test:e2e
 
 ## Security
 
+### Encryption
+
+Sensitive information in the `.env` file is encrypted and stored in the `.env.encrypted` file. To run the application, you must first decrypt the secrets and generate the `.env` file.
+
+**Decrypting secrets:**
+
+```bash
+python decrypt_env.py
+```
+
+This will create a `.env` file with the decrypted secrets. You can then run the application as usual.
+
+**Encrypting secrets:**
+
+If you make any changes to the sensitive information in the `.env` file, you must encrypt the file again to update the `.env.encrypted` file.
+
+```bash
+python encrypt_env.py
+```
+
 HeadStart implements comprehensive security measures:
 
 - **Authentication**: OAuth2 PKCE + JWT tokens

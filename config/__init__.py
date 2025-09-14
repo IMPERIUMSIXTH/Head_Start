@@ -1,1 +1,1 @@
-# Configuration package initialization
+# Config package

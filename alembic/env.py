@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from services.database import Base
 from services.models import *  # Import all models
-from config.settings import get_settings
+from config.settings import get_settings, reset_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -41,7 +41,9 @@ target_metadata = Base.metadata
 
 def get_database_url():
     """Get database URL from settings"""
+    reset_settings()
     settings = get_settings()
+    print(f"Database URL: {settings.DATABASE_URL}")
     return settings.DATABASE_URL
 
 def run_migrations_offline() -> None:

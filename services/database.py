@@ -11,7 +11,6 @@ from sqlalchemy import create_engine, MetaData, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
-import asyncpg
 from typing import AsyncGenerator
 import structlog
 from config.settings import get_settings
@@ -20,14 +19,22 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 # SQLAlchemy setup with connection pooling
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=10,
-    max_overflow=20,
-    echo=settings.DEBUG
-)
+if "sqlite" in settings.DATABASE_URL:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=settings.DEBUG
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=10,
+        max_overflow=20,
+        echo=settings.DEBUG
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -46,12 +53,13 @@ async def init_db():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
             logger.info("Database connection successful")
-            
-        # Enable pgvector extension
-        with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            logger.info("pgvector extension enabled")
-            
+
+        # Enable pgvector extension (only for PostgreSQL)
+        if "sqlite" not in settings.DATABASE_URL:
+            with engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                logger.info("pgvector extension enabled")
+
         # Create tables if they don't exist
         from services.models import Base
         Base.metadata.create_all(bind=engine)
