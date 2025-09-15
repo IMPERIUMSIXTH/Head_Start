@@ -45,6 +45,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
 
 # Updated 2025-09-05: Frontend Dockerfile for HeadStart Next.js application

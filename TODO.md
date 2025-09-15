@@ -1,23 +1,35 @@
-# AI-Powered Learning Recommendation Platform Setup - TODO
+# Frontend Rebuild and Backend Integration TODO
 
-## Completed Tasks
-- [x] Analyze existing codebase and gather information
-- [x] Create comprehensive plan for AI model integration and API endpoints
-- [x] Get user approval for the plan
-- [x] Create services/ai_client.py for OpenAI integration (gpt-4o-mini and text-embedding-3-small)
-- [x] Add POST /resources endpoint to api/content.py for adding learning resources with embeddings
-- [x] Add GET /recommend endpoint to api/recommendations.py for personalized recommendations
-- [x] Add POST /interactions endpoint to api/content.py for recording user interactions
-- [x] Update main.py to include new router if needed
-- [x] Generate handover.md summarizing schema, endpoints, and AI model integration
+## Overview
+Rebuild the frontend keeping content and styles, fix build errors, and ensure proper communication with backend and database.
 
-## Pending Tasks
-- [ ] Test the new endpoints and AI integration
-- [ ] Verify database schema supports pgvector and embeddings
-- [ ] Ensure all security practices are implemented
+## Steps
 
-## Notes
-- All core functionality has been implemented
-- AI client requires OPENAI_API_KEY environment variable
-- Database schema already supports embeddings (confirmed in models.py and init-db.sql)
-- Security practices are implemented (JWT, bcrypt, rate limiting, CORS, input validation)
+### 1. Fix Authentication Integration
+- [x] Update FlipLoginSignup.tsx to use AuthContext for login/logout
+- [x] Ensure AuthContext uses apiClient for backend calls
+- [x] Fix API URLs in AuthContext (use full paths with apiClient)
+
+### 2. Verify API Client Configuration
+- [ ] Check apiClient.ts base URL and interceptors
+- [ ] Ensure consistent use of apiClient across components
+
+### 3. Fix Build Errors
+- [ ] Run npm run build and identify errors
+- [ ] Fix TypeScript issues, missing imports, etc.
+- [ ] Remove unused imports (e.g., flip-card.css if not needed)
+
+### 4. Test Backend Communication
+- [ ] Verify login works with backend /api/auth/login
+- [ ] Test recommendations fetch in /learn page
+- [ ] Ensure database operations work through backend
+
+### 5. Preserve Styles and Content
+- [ ] Ensure all existing UI components and styles remain intact
+- [ ] Verify flip-card animations and responsive design
+- [ ] Check accessibility features
+
+### 6. Final Testing
+- [ ] Run frontend in dev mode
+- [ ] Test full user flow: login -> dashboard -> recommendations
+- [ ] Confirm no build errors
